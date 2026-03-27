@@ -1,4 +1,6 @@
+import os
 import json
+import boto3
 import urllib.request
 from datetime import datetime, timedelta
 
@@ -39,6 +41,26 @@ def transform(raw: dict) -> list[dict]:
 
     return results
 
+def save_to_s3(data: list[dict]) -> None:
+    s3 = boto3.client("s3")
+    bucket = os.environ.get("S3_BUCKET")
+    
+    payload = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "count": len(data),
+        "objects": data,
+    }
+
+    s3.put_object(
+        Bucket=bucket,
+        Key="neo/latest.json",
+        Body=json.dumps(payload, indent=2),
+        ContentType="application/json",
+    )
+    
+    print(f"Saved {len(data)} objects to s3://{bucket}/neo/latest.json")
+
+
 def derive_threat_level(hazardous: bool, miss_lunar: float, max_diam_m: float) -> str:
     if hazardous and miss_lunar < 1 and max_diam_m > 140:
         return "critical"
@@ -54,4 +76,4 @@ if __name__ == "__main__":
     end = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d")
     raw = fetch_neo_data(start, end)
     transformed = transform(raw)
-    print(json.dumps(transformed[0], indent=2))
+    save_to_s3(transformed)
